@@ -1,0 +1,17 @@
+{
+    "uname": "Linux jenkins-build-2.fuzzplex.com 4.9.91-40.57.amzn1.x86_64 #1 SMP Tue Apr 3 17:32:06 UTC 2018 x86_64 x86_64 x86_64 GNU/Linux", 
+    "cpu": "Intel(R) Xeon(R) Platinum 8275CL CPU @ 3.00GHz", 
+    "buildtools": {
+        "ar": "GNU ar (GNU Binutils) 2.31.1", 
+        "bazel": "0.28.1", 
+        "cmake": "cmake version 3.12.4", 
+        "gcc": "clang version 7.0.0 (tags/RELEASE_700/final 346285) (llvm/tags/RELEASE_700/final 346284)", 
+        "git": "git version 2.13.6", 
+        "glibc": "glibc version 2.12", 
+        "go": "go version go1.12.9 linux/amd64", 
+        "ld": "GNU gold (GNU Binutils 2.31.1) 1.16", 
+        "make": "GNU Make 4.2.1", 
+        "node": "v10.16.3", 
+        "rustc": "rustc 1.37.0 (eae3437df 2019-08-13)"
+    }
+}

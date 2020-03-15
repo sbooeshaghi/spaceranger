@@ -1,0 +1,79 @@
+#
+# Copyright (c) 2019 10X Genomics, Inc. All rights reserved.
+#
+
+filetype jpg;
+filetype png;
+filetype txt;
+filetype json;
+filetype html;
+filetype h5;
+filetype csv;
+filetype gpr;
+
+stage DISABLE_SPATIAL_STAGES(
+    in  path spot_image_path,
+    in  path tissue_image_path,
+    out bool disable_spatial,
+    src py   "../rna/stages/spatial/disable_spatial",
+)
+
+stage ALIGN_FIDUCIALS(
+    in  png    downsampled_tissue_image,
+    in  json   scalefactors_json,
+    in  json   gpr_data,
+    in  path   loupe_alignment_file,
+    in  string transform_method,
+    out txt    spot_positions_list,
+    out txt    fiducial_positions_list,
+    out jpg    aligned_fiducials,
+    out jpg    detected_keypoints,
+    out json   scalefactors_json,
+    out json   alignment_metrics,
+    src py     "../rna/stages/spatial/align_fiducials",
+) using (
+    mem_gb  = 4,
+    vmem_gb = 16,
+) retain (
+    detected_keypoints,
+)
+
+stage DETECT_TISSUE(
+    in  png    downsampled_tissue_image,
+    in  json   scalefactors_json,
+    in  bool   skip_tissue_detection,
+    in  path   spot_data_sel,
+    in  path   loupe_alignment_file,
+    in  json   gpr_data,
+    in  txt    spot_positions_list,
+    in  txt    fiducial_positions_list,
+    in  string barcode_whitelist,
+    out jpg    detected_tissue_image,
+    out csv    tissue_positions_list,
+    out json   barcodes_under_tissue,
+    out float  fraction_under_tissue,
+    src py     "../rna/stages/spatial/detect_tissue",
+) using (
+    mem_gb  = 4,
+    vmem_gb = 16,
+)
+
+stage STANDARDIZE_IMAGES(
+    in  path tissue_image_path,
+    in  path spot_image_path,
+    out json scalefactors_json,
+    out png  tissue_hires_image,
+    out png  tissue_lowres_image,
+    out png  spot_hires_image,
+    src py   "../rna/stages/spatial/standardize_images",
+) split (
+)
+
+stage GPR_READER(
+    in  string slide_serial_capture_area,
+    in  path   loupe_alignment_file,
+    in  gpr    gpr_file,
+    in  string barcode_whitelist,
+    out json   gpr_data,
+    src py     "../rna/stages/spatial/gpr_reader",
+)

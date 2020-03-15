@@ -1,0 +1,22 @@
+filetype fastq;
+filetype json;
+filetype txt;
+
+stage DETECT_CHEMISTRY(
+    in  string   sample_id,
+    in  map[]    sample_def,
+    in  path     reference_path,
+    in  path     vdj_reference_path,
+    in  string   chemistry_name_spec  "Specified chemistry name",
+    in  string[] allowed_chems        "Restricted set of chem names",
+    in  int      r1_length,
+    in  int      r2_length,
+    out json     summary,
+    out string   chemistry_type,
+    out txt      report,
+    out bool     is_antibody_only,
+    src py       "../rna/stages/chemistry_detector/detect_chemistry",
+) using (
+    mem_gb   = 8,
+    volatile = strict,
+)

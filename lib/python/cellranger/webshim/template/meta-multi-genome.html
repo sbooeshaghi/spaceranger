@@ -1,0 +1,36 @@
+{% extends 'template.html' %}
+{% import 'utils.html' as utils %}
+
+{% block analysis %}
+{% include 'charts/cluster-filter.html' %}
+<div class="summary">
+  <div class="chart_card_column">
+
+<div class="svg-container" ng-repeat="chart in charts" ng-if="chart.name == 'barcode_rank'">
+  <div chart-div chart="chart" id="chart-div-{{ $index }}"></div>
+</div>
+
+<div class="svg-container" ng-repeat="chart in charts" ng-if="chart.name == 'median_genes_per_cell'">
+  <div chart-div chart="chart" id="chart-div-{{ $index }}"></div>
+</div>
+
+<div class="svg-container" ng-repeat="chart in charts" ng-if="chart.name == 'sequencing_saturation'">
+  <div chart-div chart="chart" id="chart-div-{{ $index }}"></div>
+</div>
+
+<div class="svg-container" ng-repeat="chart in charts" ng-if="chart.name == 'top_umis'">
+  <div chart-div chart="chart" id="chart-div-{{ $index }}"></div>
+</div>
+
+<div class="svg-container" ng-repeat="chart in charts" ng-if="chart.name == 'gene_length'">
+  <div chart-div chart="chart" id="chart-div-{{ $index }}"></div>
+</div>
+
+<div class="svg-container" ng-repeat="chart in charts" ng-if="chart.name == 'barnyard_counts'">
+  <div chart-div chart="chart" id="chart-div-{{ $index }}"></div>
+</div>
+
+ </div> 
+</div>
+{% endblock %}
+

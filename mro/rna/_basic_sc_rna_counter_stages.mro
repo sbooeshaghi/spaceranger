@@ -1,0 +1,310 @@
+#
+# Copyright (c) 2019 10X Genomics, Inc. All rights reserved.
+#
+filetype bam;
+filetype bam.bai;
+filetype csv;
+filetype fastq;
+filetype json;
+filetype h5;
+filetype pickle;
+filetype bincode;
+
+stage SUMMARIZE_READ_REPORTS(
+    in  json     extract_reads_summary,
+    in  json     barcode_counts,
+    in  json     feature_counts,
+    in  int[]    gem_groups,
+    in  string[] library_types,
+    in  string[] library_ids,
+    in  string[] read_groups,
+    in  map      align,
+    in  string[] bam_comments,
+    in  fastq[]  read1s,
+    in  fastq[]  read2s,
+    in  fastq[]  tags,
+    in  bool     retain_fastqs,
+    in  map      chemistry_def,
+    out json     summary,
+    out json     barcode_counts,
+    out json     feature_counts,
+    out int[]    gem_groups,
+    out string[] library_types,
+    out string[] library_ids,
+    out string[] read_groups,
+    out map      align,
+    out string[] bam_comments,
+    out fastq[]  read1s,
+    out fastq[]  read2s,
+    out fastq[]  tags,
+    src py       "../rna/stages/counter/summarize_read_reports",
+) split (
+    in  fastq    chunk_read1,
+    in  fastq    chunk_read2,
+    in  fastq    chunk_tags,
+) using (
+    volatile = strict,
+)
+
+stage ALIGN_READS(
+    in  fastq[]  reads,
+    in  fastq[]  read2s,
+    in  string[] read_groups,
+    in  string[] library_types,
+    in  path     reference_path,
+    in  int      threads,
+    in  int      max_hits_per_read,
+    out bam[]    genome_output,
+    src py       "../rna/stages/counter/align_reads",
+) split (
+    in  fastq    read_chunk,
+    in  fastq    read2_chunk,
+    in  string   read_group,
+    in  string   library_type,
+)
+
+stage ATTACH_BCS_AND_UMIS(
+    in  bam[]    genome_inputs,
+    in  fastq[]  tags,
+    in  path     reference_path,
+    in  csv      feature_reference,
+    in  int[]    gem_groups,
+    in  string[] library_types,
+    in  string[] library_ids,
+    in  map      chemistry_def,
+    in  map      annotation_params,
+    in  string   barcode_whitelist,
+    in  json     barcode_counts,
+    in  json     feature_counts,
+    in  float    barcode_confidence_threshold,
+    in  int      umi_min_qual_threshold,
+    in  string[] bam_comments,
+    in  bool     rescue_multimappers,
+    in  bool     correct_barcodes,
+    in  bool     skip_metrics,
+    in  map      skip_translate,
+    in  bool     is_antibody_only,
+    in  bool     is_pd,
+    in  map[]    library_info,
+    out bam[]    output,
+    out int[]    num_alignments,
+    out json     summary,
+    out csv      barcodes_detected,
+    src py       "../rna/stages/counter/attach_bcs_and_umis",
+) split (
+    in  bam      chunk_genome_input,
+    in  fastq    chunk_tags,
+    in  int      gem_group,
+    in  string   library_type,
+    in  string   library_id,
+    in  json     library_info_json,
+    in  json     bam_comments_json,
+    in  bool     do_skip_translate,
+    out bincode  chunked_reporter,
+) using (
+    # No index file is generated for the bam.
+    mem_gb   = 2,
+    volatile = strict,
+)
+
+stage BUCKET_BY_BC(
+    in  int   nbases,
+    in  bam[] inputs,
+    in  int[] num_alignments,
+    out map   buckets,
+    src py    "../rna/stages/counter/bucket_reads_by_bc",
+) split (
+    in  bam   chunk_input,
+    in  map[] read_groups,
+)
+
+stage SORT_BY_BC(
+    in  map    buckets,
+    out int    total_reads,
+    out bam,
+    src py     "../rna/stages/counter/sort_reads_by_bc",
+) split (
+    in  string prefix,
+    in  bam[]  bucket,
+) using (
+    # No index file is generated for the bam.
+    volatile = strict,
+)
+
+stage MARK_DUPLICATES(
+    in  bam     input,
+    in  path    reference_path,
+    in  bool    filter_umis,
+    in  map[]   library_info,
+    out bam[]   output,
+    out csv     barcode_summary,
+    out json    summary,
+    src comp    "cr_stage martian mark_duplicates",
+) split (
+    in  int     chunk_start,
+    in  int     chunk_end,
+    in  float   chunk_size_gb,
+    in  float   bam_compression_ratio,
+    in  float   major_barcode_proportion,
+    out json    metrics,
+    out bincode chunk_barcode_summary,
+    out bam     alignments,
+) using (
+    mem_gb   = 4,
+    volatile = strict,
+)
+
+stage REPORT_MOLECULES(
+    in  bam[]  inputs,
+    in  path   reference_path,
+    in  csv[]  target_features,
+    in  csv    feature_reference,
+    in  map    align,
+    in  string barcode_whitelist,
+    in  json   extract_reads_summary,
+    in  json   attach_bcs_and_umis_summary,
+    in  json   mark_duplicates_summary,
+    in  csv    filtered_barcodes,
+    in  int    recovered_cells,
+    in  int    force_cells,
+    in  bool   disable_targeted,
+    out h5     output,
+    out json   summary,
+    src py     "../rna/stages/counter/report_molecules",
+) split (
+    in  bam    chunk_input,
+) using (
+    mem_gb   = 2,
+    volatile = strict,
+)
+
+stage SORT_BY_POS(
+    in  bam[]   inputs,
+    in  int     num_threads,
+    in  int     mem_gb,
+    out bam     output,
+    out bam.bai index,
+    src py      "../rna/stages/counter/sort_reads_by_pos",
+) split (
+    in  bam     chunk_input,
+) using (
+    volatile = strict,
+) retain (
+    index,
+)
+
+stage COUNT_GENES(
+    in  string sample_id,
+    in  bam[]  inputs,
+    in  path   reference_path,
+    in  csv    feature_reference,
+    in  csv[]  target_features,
+    in  map    chemistry_def,
+    in  string barcode_whitelist,
+    in  bool   is_antibody_only,
+    in  csv    barcodes_detected,
+    in  int[]  gem_groups,
+    in  map    align,
+    in  bool   disable_targeted,
+    out h5     matrices_h5,
+    out path   matrices_mex,
+    out pickle chunked_reporter,
+    out json   reporter_summary,
+    out h5     barcode_summary,
+    src py     "../rna/stages/counter/count_genes",
+) split (
+    in  bam    chunk_input,
+) using (
+    mem_gb   = 2,
+    volatile = strict,
+)
+
+stage FILTER_BARCODES(
+    in  string sample_id,
+    in  h5     matrices_h5,
+    in  csv    barcode_correction_csv,
+    in  json   raw_fastq_summary,
+    in  json   attach_bcs_summary,
+    in  int    recovered_cells,
+    in  int    force_cells,
+    in  h5     barcode_summary,
+    in  string barcode_whitelist,
+    in  bool   is_antibody_only,
+    in  path   reference_path,
+    in  int[]  gem_groups,
+    in  map    chemistry_def,
+    in  json   cell_barcodes           "Cell barcode override",
+    out json   summary,
+    out csv    filtered_barcodes,
+    out csv    aggregate_barcodes,
+    out h5     filtered_matrices_h5,
+    out path   filtered_matrices_mex,
+    out csv    nonambient_calls,
+    src py     "../rna/stages/counter/filter_barcodes",
+) split (
+) using (
+    mem_gb   = 8,
+    volatile = strict,
+)
+
+stage SUBSAMPLE_READS(
+    in  h5     molecule_info,
+    in  csv    filtered_barcodes,
+    in  csv[]  target_features,
+    in  string target_mode,
+    out json   summary,
+    out pickle merged_metrics,
+    src py     "../rna/stages/counter/subsample_reads",
+) split (
+    in  int    chunk_start,
+    in  int    chunk_len,
+    in  map[]  subsample_info,
+    out pickle metrics,
+) using (
+    mem_gb   = 2,
+    volatile = strict,
+)
+
+stage SUMMARIZE_BASIC_REPORTS(
+    in  json   extract_reads_summary,
+    in  path   reference_path,
+    in  map    align,
+    in  json   attach_bcs_and_umis_summary,
+    in  json   mark_duplicates_summary,
+    in  json   count_genes_reporter_summary,
+    in  json   filter_barcodes_summary,
+    in  json   subsample_molecules_summary,
+    in  json   report_molecules_summary,
+    in  string barcode_whitelist,
+    in  int[]  gem_groups,
+    out json   summary,
+    src py     "../rna/stages/counter/summarize_basic_reports",
+) using (
+    mem_gb   = 2,
+    volatile = strict,
+)
+
+stage CHECK_BARCODES_COMPATIBILITY(
+    in  map[]    chunks,
+    in  string   barcode_whitelist,
+    in  int      num_reads_to_check_barcode,
+    in  float    barcode_compatibility_cutoff,
+    out bool     barcode_compatible,
+    out map      barcode_compatibility_info,
+    out map      skip_translate,
+    src py       "../rna/stages/counter/check_barcodes_compatibility",
+) split (
+    in  int      gem_group,
+    in  string   library_type,
+    in  string   read_group,
+    in  float    subsample_rate,
+    in  int      num_reads_per_chunk_to_check_barcode,
+    in  string   library_id,
+    in  string   target_set_name,
+    in  map      read_chunks,
+    in  map      chemistry,
+    in  bool     reads_interleaved,
+    out string[] sampled_barcodes,
+) using (
+    mem_gb = 2,
+)

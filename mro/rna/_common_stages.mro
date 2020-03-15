@@ -1,0 +1,186 @@
+#
+# Copyright (c) 2017 10X Genomics, Inc. All rights reserved.
+#
+filetype bam;
+filetype bam.bai;
+filetype csv;
+filetype fastq;
+filetype json;
+filetype pickle;
+filetype gpr;
+
+# Convert sample_def = { "libraries_csv": "/path/to/libraries.csv" } into a
+# standard sample_def map used by the rest of the pipeline. Only used by the
+# CS pipeline to handle the --libraries cmd-line argument.
+stage EXPAND_SAMPLE_DEF(
+    in  map[] raw_sample_def,
+    out map[] sample_def,
+    src py    "../rna/stages/common/expand_sample_def",
+)
+
+stage CELLRANGER_PREFLIGHT(
+    in  map[]    sample_def,
+    in  string   chemistry_name,
+    in  map      custom_chemistry_def,
+    in  path     reference_path,
+    in  csv      feature_reference,
+    in  bool     check_executables,
+    in  int      recovered_cells,
+    in  int      force_cells,
+    in  string[] allowed_chems,
+    in  int      r1_length,
+    in  int      r2_length,
+    src py       "../rna/stages/common/cellranger_preflight",
+) using (
+    mem_gb = 2,
+)
+
+stage CELLRANGER_PREFLIGHT_LOCAL(
+    in  map[]    sample_def,
+    in  string   chemistry_name,
+    in  map      custom_chemistry_def,
+    in  path     reference_path,
+    in  csv      feature_reference,
+    in  bool     check_executables,
+    in  int      recovered_cells,
+    in  int      force_cells,
+    in  string[] allowed_chems,
+    in  int      r1_length,
+    in  int      r2_length,
+    src py       "../rna/stages/common/cellranger_preflight",
+) using (
+    mem_gb = 2,
+)
+
+stage SPACERANGER_PREFLIGHT(
+    in  map[]    sample_def,
+    in  string   chemistry_name,
+    in  map      custom_chemistry_def,
+    in  path     reference_path,
+    in  bool     check_executables,
+    in  int      recovered_cells,
+    in  int      force_cells,
+    in  string[] allowed_chems,
+    in  int      r1_length,
+    in  int      r2_length,
+    in  path     tissue_image_path,
+    in  path     loupe_alignment_file,
+    in  gpr      gpr_file,
+    in  string   slide_serial_capture_area,
+    src py       "../rna/stages/common/spaceranger_preflight",
+) using (
+    mem_gb = 2,
+)
+
+stage SPACERANGER_PREFLIGHT_LOCAL(
+    in  map[]    sample_def,
+    in  string   chemistry_name,
+    in  map      custom_chemistry_def,
+    in  path     reference_path,
+    in  bool     check_executables,
+    in  int      recovered_cells,
+    in  int      force_cells,
+    in  string[] allowed_chems,
+    in  int      r1_length,
+    in  int      r2_length,
+    in  path     tissue_image_path,
+    in  path     loupe_alignment_file,
+    in  gpr      gpr_file,
+    in  string   slide_serial_capture_area,
+    src py       "../rna/stages/common/spaceranger_preflight",
+) using (
+    mem_gb = 2,
+)
+
+stage DISABLE_FEATURE_STAGES(
+    in  map[] sample_def,
+    out bool  disable_crispr,
+    out bool  disable_antibody,
+    out bool  disable_internalqc,
+    src py    "../rna/stages/common/disable_feature_stages",
+)
+
+stage SETUP_CHUNKS(
+    in  string   sample_id,
+    in  map[]    sample_def,
+    in  string[] library_type_filter,
+    in  string   chemistry_name,
+    in  map      custom_chemistry_def,
+    in  string   default_library_type,
+    out map[]    chunks,
+    out map      chemistry_def,
+    out string   barcode_whitelist,
+    out map[]    library_info,
+    src py       "../rna/stages/common/setup_chunks",
+)
+
+stage CHUNK_READS(
+    in  map[] chunks,
+    in  int   reads_per_file,
+    out map[] out_chunks,
+    src py    "../rna/stages/common/chunk_reads",
+) split (
+    in  map   read_chunk,
+) using (
+    mem_gb = 2,
+)
+
+stage EXTRACT_READS(
+    in  map[]    chunks,
+    in  map      chemistry_def,
+    in  string   barcode_whitelist,
+    in  int      reads_per_file,
+    in  float    subsample_rate,
+    in  int      initial_reads,
+    in  map[]    primers,
+    in  map      align,
+    in  int      r1_length,
+    in  int      r2_length,
+    in  bool     skip_metrics,
+    in  path     reference_path,
+    in  csv      feature_reference,
+    in  bool     augment_fastq,
+    in  map[]    library_info,
+    out pickle   chunked_reporter,
+    out json     summary,
+    out json     barcode_counts,
+    out json     feature_counts,
+    out fastq[]  reads,
+    out fastq[]  read2s,
+    out fastq[]  tags,
+    out int[]    gem_groups,
+    out string[] library_types,
+    out string[] library_ids,
+    out string[] read_groups,
+    out map      align,
+    out string[] bam_comments,
+    src py       "../rna/stages/common/extract_reads",
+) split (
+    in  map      read_chunks,
+    in  bool     reads_interleaved,
+    in  int      chunk_initial_reads,
+    in  float    chunk_subsample_rate,
+    in  string   read_group,
+    in  string   library_type,
+    in  map      chemistry,
+    in  string   library_id,
+    in  int      gem_group,
+    in  string   target_set_name,
+    out fastq    read,
+) using (
+    mem_gb = 2,
+)
+
+stage PARSE_TARGET_FEATURES(
+    in  map[] sample_def,
+    in  path  reference_path,
+    in  csv   feature_reference,
+    in  bool  is_antibody_only,
+    out csv[] target_features,
+    out csv[] off_target_features,
+    out csv   target_gene_ids,
+    out bool  disable_targeted,
+    src py    "../rna/stages/common/parse_target_features",
+) using (
+    mem_gb = 2,
+)

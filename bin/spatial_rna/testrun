@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+#
+# Copyright (c) 2016 10x Genomics, Inc. All rights reserved.
+#
+# Run SC_RNA_COUNTER_CS on test data with mrp.
+#
+
+source $TENX_SCRIPTDIR/rna/_includes
+
+
+# Note this variable was previously set, CSI-869
+read -d '' DOCOPT_OPTIONS_FOOTER <<EOF
+    -h --help           Show this message.
+    --version           Show version.
+EOF
+
+DOCOPT_SPEC="$(cat <<EOF
+Exercises a minimal pipeline on a tiny dataset to confirm software package was
+installed correctly.
+
+Usage:
+    $TENX_SUBCMD --id=ID [options]
+    $TENX_SUBCMD -h | --help | --version
+
+Arguments:
+    id                  A unique run id and output folder name [a-zA-Z0-9_-]+.
+
+Options:
+# Spatial Gene Expression
+    --unknown-slide     Set this if the slide serial number and area identifier
+                            are unknown. WARNING: should only be used as a last
+                            resort. Setting this will cause Space Ranger to use
+                            default spot positions.
+
+# Martian Runtime
+    $DOCOPT_OPTIONS_MRP_CLUSTER
+EOF
+)"
+
+function implement_process_options {
+    echo "Running Space Ranger in test mode..."
+    echo
+    TEST_REF_VERSION="1.0.0"
+    dist_path=$TENX_SCRIPTDIR/../../..
+
+    fastq_mode=\"ILMN_BCL2FASTQ\"
+
+    tiny_inputs="$(abspath "$TENX_SCRIPTDIR/../external/spaceranger_tiny_inputs")"
+    fastqs=$tiny_inputs/fastqs
+    lanes=\[\ \"1\"\ \]
+    sample_names=\[\ \"tinytest\"\ \]
+    indices=\[\ \"any\"\ \]
+    sample_desc=\"SpaceRangerTest\"
+
+    tiny_ref=$TENX_SCRIPTDIR/../external/spaceranger_tiny_ref/$TEST_REF_VERSION
+    reference_path=\"$(abspath $tiny_ref)\"
+
+    image=\"$tiny_inputs/image/tinyimage.jpg\"
+
+    if [ $unknown_slide == "true" ]; then
+        slide_area=null
+    else
+        slide_area=\"V19L29-035-A1\"
+    fi
+
+    nosecondary=null
+    r1_length=null
+    r2_length=null
+    loupe_alignment=null
+    slidefile=null
+}
+
+function implement_generate_sample_defs {
+    sample_def=""
+    for fastq in $fastqs; do
+        sample_def="$sample_def
+        {
+            \"fastq_mode\": $fastq_mode,
+            \"gem_group\": null,
+            \"lanes\": $lanes,
+            \"read_path\": \"$fastq\",
+            \"sample_indices\": $indices,
+            \"sample_names\": $sample_names
+        },"
+    done
+    sample_def=${sample_def%\,}
+    sample_def=$(echo -e "[ $sample_def\n    ]")
+}
+
+function implement_generate_mro {
+    cat <<EOF > $mro
+@include "rna/spatial_rna_counter_cs.mro"
+
+call SPATIAL_RNA_COUNTER_CS(
+    sample_id = $sample_id,
+    sample_def = $sample_def,
+    sample_desc = $sample_desc,
+    reference_path = $reference_path,
+    no_secondary_analysis = $nosecondary,
+    r1_length = $r1_length,
+    r2_length = $r2_length,
+    tissue_image_path = $image,
+    slide_serial_capture_area = $slide_area,
+    loupe_alignment_file = $loupe_alignment,
+    gpr_file = $slidefile,
+)
+EOF
+}
+
+source $TENX_SCRIPTDIR/../tenkit/bin/common/_subcmd_mrp

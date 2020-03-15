@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+#
+# Copyright (c) 2017 10x Genomics, Inc. All rights reserved.
+#
+# Main driver for all Cell Ranger subcommands.
+#
+
+PRODUCT=spaceranger
+SUBCMDS=(
+    mkfastq
+    --
+    count
+    mat2csv
+    --
+    mkgtf
+    mkref
+    --
+    testrun
+    upload
+    sitecheck
+)
+
+export TENX_SCRIPTDIR=$(dirname `readlink -f $0`)
+
+# Capture the user-supplied sub-command and export the correct
+# subcommand directory
+SUBCMD=$1
+
+if [[ "$SUBCMD" == "dry" ]]; then
+    export TENX_DRYMODE=true
+    shift 1
+    SUBCMD=$1
+    export TENX_SUBCMD=$1
+fi
+
+if [ -f "$TENX_SCRIPTDIR/rna/$SUBCMD" ]; then
+    export TENX_SUBCMDDIR="$TENX_SCRIPTDIR/rna"
+elif [ -f "$TENX_SCRIPTDIR/spatial_rna/$SUBCMD" ]; then
+    export TENX_SUBCMDDIR="$TENX_SCRIPTDIR/spatial_rna"
+else
+    export TENX_SUBCMDDIR=/dev/null
+fi
+
+echo $TENX_SCRIPTDIR
+source $TENX_SCRIPTDIR/../tenkit/bin/common/_master

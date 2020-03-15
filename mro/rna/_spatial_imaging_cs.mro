@@ -1,0 +1,75 @@
+#
+# Copyright (c) 2019 10X Genomics, Inc. All rights reserved.
+#
+#
+@include "_spatial_imaging_stages.mro"
+
+filetype jpg;
+filetype png;
+filetype tiff;
+filetype txt;
+filetype json;
+
+pipeline _SPATIAL_IMAGING_CS(
+    in  string slide_serial_capture_area  "Slide serial number and area id",
+    in  path   loupe_alignment_file       "Path to Loupe-generated manual alignment file",
+    in  gpr    gpr_file                   "Slide GPR file",
+    in  path   tissue_image_path          "Path to slide image",
+    in  string barcode_whitelist          "Whitelisted barcodes CSV",
+    out jpg    aligned_fiducials          "Slide image annotated with fiducial alignment",
+    out jpg    detected_tissue_image      "Slide image annotated with detected tissue",
+    out csv    tissue_positions_list      "Slide position and tissue status of barcodes CSV",
+    out txt    fiducial_positions_list    "Slide position of fiducial spots CSV",
+    out json   barcodes_under_tissue      "Slide position and tissue status of barcodes JSON",
+    out float  fraction_under_tissue      "Fraction of barcodes under tissue",
+    out json   image_scalefactors         "Scale factors for hires and lowres images and fiducial and spot diameters",
+    out json   alignment_metrics          "Metrics from fiducial alignment procedure",
+    out png    tissue_hires_image         "Slide image scaled to 2000px in the largest dimension",
+    out png    tissue_lowres_image        "Slide image scaled to 600px in the largest dimension",
+)
+{
+    call GPR_READER(
+        slide_serial_capture_area = self.slide_serial_capture_area,
+        loupe_alignment_file      = self.loupe_alignment_file,
+        gpr_file                  = self.gpr_file,
+        barcode_whitelist         = self.barcode_whitelist,
+    )
+
+    call STANDARDIZE_IMAGES(
+        tissue_image_path = self.tissue_image_path,
+        spot_image_path   = null,
+    )
+
+    call ALIGN_FIDUCIALS(
+        downsampled_tissue_image = STANDARDIZE_IMAGES.tissue_hires_image,
+        scalefactors_json        = STANDARDIZE_IMAGES.scalefactors_json,
+        gpr_data                 = GPR_READER.gpr_data,
+        loupe_alignment_file     = self.loupe_alignment_file,
+        transform_method         = "rigid",
+    )
+
+    call DETECT_TISSUE(
+        downsampled_tissue_image = STANDARDIZE_IMAGES.tissue_hires_image,
+        scalefactors_json        = ALIGN_FIDUCIALS.scalefactors_json,
+        skip_tissue_detection    = false,
+        loupe_alignment_file     = self.loupe_alignment_file,
+        gpr_data                 = GPR_READER.gpr_data,
+        spot_positions_list      = ALIGN_FIDUCIALS.spot_positions_list,
+        fiducial_positions_list  = ALIGN_FIDUCIALS.fiducial_positions_list,
+        barcode_whitelist        = self.barcode_whitelist,
+        spot_data_sel            = null,
+    )
+
+    return (
+        aligned_fiducials       = ALIGN_FIDUCIALS.aligned_fiducials,
+        fiducial_positions_list = ALIGN_FIDUCIALS.fiducial_positions_list,
+        detected_tissue_image   = DETECT_TISSUE.detected_tissue_image,
+        tissue_positions_list   = DETECT_TISSUE.tissue_positions_list,
+        barcodes_under_tissue   = DETECT_TISSUE.barcodes_under_tissue,
+        fraction_under_tissue   = DETECT_TISSUE.fraction_under_tissue,
+        image_scalefactors      = ALIGN_FIDUCIALS.scalefactors_json,
+        tissue_hires_image      = STANDARDIZE_IMAGES.tissue_hires_image,
+        tissue_lowres_image     = STANDARDIZE_IMAGES.tissue_lowres_image,
+        alignment_metrics       = ALIGN_FIDUCIALS.alignment_metrics,
+    )
+}

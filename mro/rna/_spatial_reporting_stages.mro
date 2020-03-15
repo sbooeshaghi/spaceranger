@@ -1,0 +1,36 @@
+#
+# Copyright (c) 2019 10X Genomics, Inc. All rights reserved.
+#
+filetype csv;
+filetype json;
+filetype h5;
+filetype html;
+filetype png;
+filetype jpg;
+filetype txt;
+
+stage SPATIAL_REPORTER(
+    in  json[] summaries,
+    in  string sample_id,
+    in  string sample_desc,
+    in  string slide_serial_info,
+    in  path   reference_path,
+    in  path   analysis,
+    in  h5     barcode_summary_h5,
+    in  csv    filtered_barcodes,
+    in  string barcode_whitelist,
+    in  int[]  gem_groups,
+    in  h5     matrix,
+    in  json   scalefactors,
+    in  jpg    aligned_fiducials,
+    in  float  fraction_under_tissue,
+    in  png    tissue_hires_image,
+    in  png    tissue_lowres_image,
+    in  jpg    detected_tissue_image,
+    in  csv    tissue_positions_list,
+    out path   spatial,
+    out html   web_summary,
+    out json   metrics_summary_json,
+    out csv    metrics_summary_csv,
+    src py     "../rna/stages/spatial/spatial_reporter",
+)

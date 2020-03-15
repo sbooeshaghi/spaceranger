@@ -1,0 +1,15 @@
+#
+# Copyright (c) 2019 10X Genomics, Inc. All rights reserved.
+#
+filetype json;
+
+stage CLOUPE_TILE_IMAGES(
+    in  path tissue_image_path,
+    in  int  tile_size,
+    in  bool skip_stage,
+    in  bool no_secondary_analysis,
+    out json dzi_info,
+    out path dzi_tiles_path,
+    src py   "../rna/stages/cloupe/cloupe_tile_images",
+) split (
+)

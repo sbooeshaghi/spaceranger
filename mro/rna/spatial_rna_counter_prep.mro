@@ -1,0 +1,55 @@
+#
+# Copyright (c) 2019 10X Genomics, Inc. All rights reserved.
+#
+@include "chemistry_detector.mro"
+@include "_common_stages.mro"
+@include "_basic_sc_rna_counter_stages.mro"
+
+pipeline SPATIAL_RNA_COUNTER_PREP(
+    in  string   sample_id,
+    in  map[]    sample_def,
+    in  string   chemistry_name,
+    in  map      custom_chemistry_def,
+    in  path     reference_path,
+    in  int      r1_length                "Trim input R1 to this length (optional)",
+    in  int      r2_length                "Trim input R2 to this length (optional)",
+    in  string[] allowed_chems,
+    in  string[] library_type_filter,
+    out map[]    chunks,
+    out map      chemistry_def,
+    out string   barcode_whitelist,
+    out string   chemistry_type,
+    out map[]    library_info,
+)
+{
+    call CHEMISTRY_DETECTOR(
+        sample_id           = self.sample_id,
+        sample_def          = self.sample_def,
+        reference_path      = self.reference_path,
+        vdj_reference_path  = null,
+        chemistry_name_spec = self.chemistry_name,
+        allowed_chems       = self.allowed_chems,
+        r1_length           = self.r1_length,
+        r2_length           = self.r2_length,
+    )
+
+    call SETUP_CHUNKS(
+        sample_id            = self.sample_id,
+        sample_def           = self.sample_def,
+        library_type_filter  = self.library_type_filter,
+        chemistry_name       = CHEMISTRY_DETECTOR.chemistry_type,
+        custom_chemistry_def = self.custom_chemistry_def,
+        default_library_type = null,
+    ) using (
+        local    = true,
+        volatile = true,
+    )
+
+    return (
+        chunks            = SETUP_CHUNKS.chunks,
+        chemistry_def     = SETUP_CHUNKS.chemistry_def,
+        library_info      = SETUP_CHUNKS.library_info,
+        barcode_whitelist = SETUP_CHUNKS.barcode_whitelist,
+        chemistry_type    = CHEMISTRY_DETECTOR.chemistry_type,
+    )
+}

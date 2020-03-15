@@ -1,0 +1,202 @@
+#
+# Copyright (c) 2019 10X Genomics, Inc. All rights reserved.
+#
+@include "spatial_rna_counter_prep.mro"
+@include "spatial_rna_counter.mro"
+@include "_common_cloupe_stages.mro"
+@include "_common_stages.mro"
+@include "_spatial_cloupe_stages.mro"
+@include "_spatial_imaging_cs.mro"
+
+pipeline SPATIAL_RNA_COUNTER_CS(
+    in  string  sample_id                      "A unique run id",
+    in  map[]   sample_def                     "Sample definition",
+    in  string  sample_desc                    "Sample description to embed in output files",
+    in  string  slide_serial_capture_area      "Slide serial number and area id",
+    in  path    loupe_alignment_file           "Path to Loupe-generated manual alignment file",
+    in  gpr     gpr_file                       "Slide GPR file",
+    in  path    reference_path                 "Path to reference",
+    in  bool    no_secondary_analysis          "Flag to disable clustering and dimensionality reduction",
+    in  int     r1_length                      "Trim input R1 to this length (optional)",
+    in  int     r2_length                      "Trim input R2 to this length (optional)",
+    in  path    tissue_image_path              "Path to slide image",
+    out html    web_summary                    "Run summary HTML",
+    out path    spatial                        "Outputs of spatial pipeline",
+    out csv     metrics_summary                "Run summary CSV",
+    out bam     possorted_genome_bam           "BAM"                      "possorted_genome_bam.bam",
+    out bam.bai possorted_genome_bam_index     "BAM index"                "possorted_genome_bam.bam.bai",
+    out path    filtered_feature_bc_matrix     "Filtered feature-barcode matrices MEX",
+    out h5      filtered_feature_bc_matrix_h5  "Filtered feature-barcode matrices HDF5"  "filtered_feature_bc_matrix.h5",
+    out path    raw_feature_bc_matrix          "Unfiltered feature-barcode matrices MEX",
+    out h5      raw_feature_bc_matrix_h5       "Unfiltered feature-barcode matrices HDF5"  "raw_feature_bc_matrix.h5",
+    out path    analysis                       "Secondary analysis output CSV",
+    out h5      molecule_info                  "Per-molecule read information",
+    out cloupe  cloupe                         "Loupe Browser file",
+)
+{
+    call SPACERANGER_PREFLIGHT(
+        sample_def                = self.sample_def,
+        chemistry_name            = "SPATIAL3Pv1",
+        custom_chemistry_def      = null,
+        reference_path            = self.reference_path,
+        check_executables         = true,
+        recovered_cells           = null,
+        force_cells               = null,
+        allowed_chems             = ["SPATIAL3Pv1"],
+        r1_length                 = self.r1_length,
+        r2_length                 = self.r2_length,
+        tissue_image_path         = self.tissue_image_path,
+        loupe_alignment_file      = self.loupe_alignment_file,
+        gpr_file                  = self.gpr_file,
+        slide_serial_capture_area = self.slide_serial_capture_area,
+    ) using (
+        preflight = true,
+    )
+
+    call SPACERANGER_PREFLIGHT_LOCAL(
+        sample_def                = self.sample_def,
+        chemistry_name            = "SPATIAL3Pv1",
+        custom_chemistry_def      = null,
+        reference_path            = self.reference_path,
+        check_executables         = false,
+        recovered_cells           = null,
+        force_cells               = null,
+        allowed_chems             = ["SPATIAL3Pv1"],
+        r1_length                 = self.r1_length,
+        r2_length                 = self.r2_length,
+        tissue_image_path         = self.tissue_image_path,
+        loupe_alignment_file      = self.loupe_alignment_file,
+        gpr_file                  = self.gpr_file,
+        slide_serial_capture_area = self.slide_serial_capture_area,
+    ) using (
+        local     = true,
+        preflight = true,
+    )
+
+    call SPATIAL_RNA_COUNTER_PREP(
+        sample_id               = self.sample_id,
+        sample_def              = self.sample_def,
+        chemistry_name          = "SPATIAL3Pv1",
+        custom_chemistry_def    = null,
+        r1_length               = self.r1_length,
+        r2_length               = self.r2_length,
+        allowed_chems           = ["SPATIAL3Pv1"],
+        library_type_filter     = null,
+        reference_path          = self.reference_path,
+    )
+
+    call _SPATIAL_IMAGING_CS as SPATIAL_IMAGING_CS(
+        slide_serial_capture_area = self.slide_serial_capture_area,
+        loupe_alignment_file      = self.loupe_alignment_file,
+        gpr_file                  = self.gpr_file,
+        tissue_image_path         = self.tissue_image_path,
+        barcode_whitelist         = SPATIAL_RNA_COUNTER_PREP.barcode_whitelist,
+    )
+
+    call SPATIAL_RNA_COUNTER(
+        sample_id                    = self.sample_id,
+        sample_desc                  = self.sample_desc,
+        slide_serial_capture_area    = self.slide_serial_capture_area,
+        chunks                       = SPATIAL_RNA_COUNTER_PREP.chunks,
+        chemistry_def                = SPATIAL_RNA_COUNTER_PREP.chemistry_def,
+        barcode_whitelist            = SPATIAL_RNA_COUNTER_PREP.barcode_whitelist,
+        library_info                 = SPATIAL_RNA_COUNTER_PREP.library_info,
+        barcode_confidence_threshold = 0.975,
+        umi_min_qual_threshold       = 10,
+        align                        = {
+            "aligner": "star",
+            "high_conf_mapq": null,
+        },
+        align_threads                = 4,
+        primers                      = [
+            {
+                "name": "P5",
+                "seq": "AATGATACGGCGACCACCGAGATCT",
+            },
+            {
+                "name": "P7",
+                "seq": "CAAGCAGAAGACGGCATACGAGAT",
+            },
+            {
+                "name": "R1",
+                "seq": "ACACTCTTTCCCTACACGACG",
+            },
+            {
+                "name": "R2",
+                "seq": "GTGACTGGAGTTCAGACGTGTG",
+            },
+            {
+                "name": "switch_oligo",
+                "seq": "AAGCAGTGGTATCAACGCAGAGTACATGGG",
+            },
+            {
+                "name": "polyA",
+                "seq": "AAAAAAAAAAAAAAAAAAAA",
+            },
+        ],
+        subsample_rate               = 1,
+        initial_reads                = null,
+        annotation_params            = null,
+        no_secondary_analysis        = self.no_secondary_analysis,
+        filter_umis                  = true,
+        retain_fastqs                = false,
+        is_pd                        = false,
+        reference_path               = self.reference_path,
+        recovered_cells              = null,
+        force_cells                  = null,
+        r1_length                    = self.r1_length,
+        r2_length                    = self.r2_length,
+        barcodes_under_tissue        = SPATIAL_IMAGING_CS.barcodes_under_tissue,
+        alignment_metrics            = SPATIAL_IMAGING_CS.alignment_metrics,
+        aligned_fiducials            = SPATIAL_IMAGING_CS.aligned_fiducials,
+        tissue_hires_img             = SPATIAL_IMAGING_CS.tissue_hires_image,
+        tissue_lowres_img            = SPATIAL_IMAGING_CS.tissue_lowres_image,
+        detected_tissue_img          = SPATIAL_IMAGING_CS.detected_tissue_image,
+        tissue_positions_list        = SPATIAL_IMAGING_CS.tissue_positions_list,
+        image_scale_factors          = SPATIAL_IMAGING_CS.image_scalefactors,
+        fraction_under_tissue        = SPATIAL_IMAGING_CS.fraction_under_tissue,
+    )
+
+    call CLOUPE_TILE_IMAGES(
+        tissue_image_path     = self.tissue_image_path,
+        tile_size             = 512,
+        skip_stage            = false,
+        no_secondary_analysis = false,
+    ) using (
+        volatile = true,
+    )
+
+    call CLOUPE_PREPROCESS(
+        pipestance_type              = "SPATIAL_RNA_COUNTER_CS",
+        sample_id                    = self.sample_id,
+        sample_desc                  = self.sample_desc,
+        analysis                     = SPATIAL_RNA_COUNTER.analysis,
+        filtered_gene_bc_matrices_h5 = SPATIAL_RNA_COUNTER.filtered_gene_bc_matrices_h5,
+        metrics_json                 = SPATIAL_RNA_COUNTER.metrics_summary_json,
+        aggregation_csv              = null,
+        gem_group_index_json         = null,
+        tissue_image_path            = self.tissue_image_path,
+        tissue_positions_list        = SPATIAL_IMAGING_CS.tissue_positions_list,
+        fiducial_positions_list      = SPATIAL_IMAGING_CS.fiducial_positions_list,
+        dzi_info                     = CLOUPE_TILE_IMAGES.dzi_info,
+        dzi_tiles_path               = CLOUPE_TILE_IMAGES.dzi_tiles_path,
+        scale_factors_json           = SPATIAL_IMAGING_CS.image_scalefactors,
+        no_secondary_analysis        = false,
+        barcode_whitelist            = SPATIAL_RNA_COUNTER_PREP.barcode_whitelist,
+    )
+
+    return (
+        possorted_genome_bam          = SPATIAL_RNA_COUNTER.possorted_genome_bam,
+        possorted_genome_bam_index    = SPATIAL_RNA_COUNTER.possorted_genome_bam_index,
+        web_summary                   = SPATIAL_RNA_COUNTER.web_summary,
+        spatial                       = SPATIAL_RNA_COUNTER.spatial,
+        metrics_summary               = SPATIAL_RNA_COUNTER.metrics_summary_csv,
+        raw_feature_bc_matrix         = SPATIAL_RNA_COUNTER.raw_gene_bc_matrices_mex,
+        raw_feature_bc_matrix_h5      = SPATIAL_RNA_COUNTER.raw_gene_bc_matrices_h5,
+        filtered_feature_bc_matrix    = SPATIAL_RNA_COUNTER.filtered_gene_bc_matrices_mex,
+        filtered_feature_bc_matrix_h5 = SPATIAL_RNA_COUNTER.filtered_gene_bc_matrices_h5,
+        analysis                      = SPATIAL_RNA_COUNTER.analysis_csv,
+        molecule_info                 = SPATIAL_RNA_COUNTER.molecule_info,
+        cloupe                        = CLOUPE_PREPROCESS.output_for_cloupe,
+    )
+}
