@@ -235,6 +235,9 @@ This error is usually caused by one of the following:
 3. Your sequencing data might be of such low quality that all the reads
    ended up in the "Undetermined" FASTQs. Please double check the quality
    of your sequence data.
+4. You have provided an incorrect ID parameter to spaceranger. Specifically,
+   you have used "spaceranger mkfastq -id" instead of "spaceranger mkfastq
+   --id".
 """)
 
     chunk_defs = [{'input_files': file_list, 'project': tup[0], 'lane': tup[1], 'sample': tup[2], 'subfolder': tup[3]} for tup, file_list in sorted(chunk_dict.items())]
